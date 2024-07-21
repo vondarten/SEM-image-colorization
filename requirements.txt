@@ -95,6 +95,7 @@ srsly==2.4.8
 stqdm==0.0.5
 streamlit==1.36.0
 streamlit-image-comparison==0.0.4
+streamlit-js-eval==0.1.7
 sympy==1.12
 tempdir==0.7.1
 tenacity==8.5.0

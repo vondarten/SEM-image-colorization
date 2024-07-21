@@ -15,6 +15,7 @@ from fastai.torch_core import TensorBase
 from fastai.vision.learner import create_body
 from fastai.vision.models.unet import DynamicUnet
 from typing import Dict
+from streamlit_js_eval import streamlit_js_eval
 
 class UNetColorizer(DynamicUnet):
     def __init__(self, *args,  **kwargs):
@@ -103,7 +104,7 @@ def rgb_to_lab(img: np.ndarray) -> Dict:
     
     return {'L': L, 'ab': ab}
 
-def colorize(model: UNetColorizer, img: Image) -> Image:
+def colorize(img: Image) -> Image:
 
     """
     Colorize a grayscale image using a trained UNet colorization model.
@@ -126,6 +127,10 @@ def colorize(model: UNetColorizer, img: Image) -> Image:
     if not img:
         st.error(selected_text["upload_error"])
         return
+
+    with st.status(selected_text["loading_model"], expanded=True) as status:
+        model = load_model()
+        status.update(label=selected_text["loaded_model"].format(sum(p.numel() for p in model.parameters())), state="complete", expanded=False)
 
     with st.status(selected_text["colorizing"], expanded=True) as status:
 
@@ -203,6 +208,7 @@ def load_image(sample_image=None) -> Image:
         st.error(selected_text["upload_error"])
         return None
 
+@st.cache_resource
 def load_model() -> UNetColorizer:
     """
     Load a pre-trained UNet colorization model.
@@ -215,14 +221,12 @@ def load_model() -> UNetColorizer:
         UNetColorizer: The loaded UNetColorizer model ready for inference.
     """
 
-    with st.status(selected_text["loading_model"], expanded=True) as status:
-        basemodel = models.resnet18()
-        body = create_body(basemodel, n_in=1, pretrained=False, cut=-2) 
-        model = UNetColorizer(body, 2, (384, 384), self_attention=False, act_cls=torch.nn.Mish).to('cpu')
-        experiment = 'gan-unet-resnet18-just-mish-4-2024-07-18-17:45:12'
-        saved_model = torch.load(f"./experiments/{experiment}/model.pth", map_location='cpu')
-        model.load_state_dict(saved_model['model_state_dict'])
-        status.update(label=selected_text["loaded_model"].format(sum(p.numel() for p in model.parameters())), state="complete", expanded=False)
+    basemodel = models.resnet18()
+    body = create_body(basemodel, n_in=1, pretrained=False, cut=-2) 
+    model = UNetColorizer(body, 2, (384, 384), self_attention=False, act_cls=torch.nn.Mish).to('cpu')
+    experiment = 'gan-unet-resnet18-just-mish-4-2024-07-18-17:45:12'
+    saved_model = torch.load(f"./experiments/{experiment}/model.pth", map_location='cpu')
+    model.load_state_dict(saved_model['model_state_dict'])
 
     return model
 
@@ -258,9 +262,10 @@ def plot_feature_maps() -> None:
         fig, axes = plt.subplots(3, 3, figsize=(20, 20))
 
         for i, (ax, idx) in enumerate(zip(axes.flat, random_indices)):
-            ax.imshow(selected_feature_maps[i], cmap='viridis')
+            im = ax.imshow(selected_feature_maps[i], cmap='viridis')
             ax.axis('off')
             ax.set_title(f'#{idx} - {selected_text["tensor_shape"]}: {selected_feature_maps[i].shape}', fontsize=24)
+            fig.colorbar(im, ax=ax, fraction=0.046, pad=0.04)
 
         plt.suptitle(f'9/{depth_shape[1]} {selected_text["feature_maps_plot_title"]} {depth_to_choose}', fontsize=32)
         plt.subplots_adjust(top=0.90)
@@ -275,13 +280,19 @@ def plot_feature_maps() -> None:
         fig, axes = plt.subplots(1, 2, figsize=(20, 12))
 
         for i, (ax, idx) in enumerate(zip(axes, range(2))):
-            ax.imshow(feature_maps[i], cmap='viridis')
+            im = ax.imshow(feature_maps[i], cmap='viridis')
             ax.axis('off')
             ax.set_title(f'#{idx} - {selected_text["tensor_shape"]}: {feature_maps[i].shape}', fontsize=24)
+            fig.colorbar(im, ax=ax, fraction=0.046, pad=0.04)
 
         plt.suptitle(f'{selected_text["feature_maps_plot_title"]} {depth_to_choose}', fontsize=32)
         plt.subplots_adjust(top=0.90)
         st.pyplot(fig)
+
+        ### Release memory
+        for feature_map in st.session_state["feature_maps"]:
+            del feature_map
+
 
 def set_result_button_state():
     st.session_state['result'] = True
@@ -308,13 +319,13 @@ text = {
         "forward_prop": "Model inference...",
         "interpolating": "Interpolating generated AB channels back to original size...",
         "converting": "Converting from LAB back to RGB...",
-        "colorized_image": "Done in {:.2f} seconds.",
+        "colorized_image": "Done in {:.2f} s ✅",
         "original": "Original",
         "colorized": "Colorized",
         "see_feature_maps": "See feature maps",
         "feature_maps_plot_title": "Feature Maps at Depth",
         "getting_feature_maps": 'Getting feature maps',
-        "tensor_shape": "shape",
+        "tensor_shape": "Shape",
         "download_button": "Download",
         "filename": "Colorized"
     },
@@ -334,7 +345,7 @@ text = {
         "forward_prop": "Inferência...",
         "interpolating": "Interpolando os canais AB gerados de volta às dimensões originais...",
         "converting": "Convertendo de LAB para RGB...",
-        "colorized_image": "Concluído em {:.2f} segundos.",
+        "colorized_image": "Concluído em {:.2f} s ✅",
         "original": "Original",
         "colorized": "Colorizada",
         "see_feature_maps": "Ver mapas de características",
@@ -346,71 +357,77 @@ text = {
     }
 }
 
-st.set_page_config(page_title=text['English 🇺🇸']["title"], layout="centered")
+if __name__ == "__main__":
 
-### Set language options
-languages = ["English 🇺🇸", "Português 🇧🇷"]
-language_selection = st.sidebar.selectbox("Select Language", languages)
+    st.set_page_config(page_title=text['English 🇺🇸']["title"], layout="centered")
 
-### Get the selected language text
-selected_text = text[language_selection]
-st.title(selected_text["title"])
-st.subheader(selected_text["subtitle"])
-st.markdown(selected_text["description"])
+    ### Set language options
+    languages = ["English 🇺🇸", "Português 🇧🇷"]
+    language_selection = st.sidebar.selectbox("Select Language", languages)
 
-### Sample images
-sample_images = {
-    f"{selected_text['sample_label']} 1": "./samples/Polen_1062_550X_rgb.png",
-    f"{selected_text['sample_label']} 2": "./samples/PolenHibisco_300X-2_rgb.png",
-    f"{selected_text['sample_label']} 3": "./samples/PolenHibisco_850X_rgb.png"
-}
+    ### Get the selected language text
+    selected_text = text[language_selection]
+    st.title(selected_text["title"])
+    st.subheader(selected_text["subtitle"])
+    st.markdown(selected_text["description"])
 
-if "feature_maps" not in st.session_state:
-    st.session_state["feature_maps"] = []
+    ### Sample images
+    sample_images = {
+        f"{selected_text['sample_label']} 1": "./samples/Polen_1062_550X_rgb.png",
+        f"{selected_text['sample_label']} 2": "./samples/PolenHibisco_300X-2_rgb.png",
+        f"{selected_text['sample_label']} 3": "./samples/PolenHibisco_850X_rgb.png"
+    }
 
-if "result" not in st.session_state:
-    st.session_state["result"] = None
+    if "feature_maps" not in st.session_state:
+        st.session_state["feature_maps"] = []
 
-if "show_fmaps" not in st.session_state:
-    st.session_state["show_fmaps"] = None
+    if "result" not in st.session_state:
+        st.session_state["result"] = None
 
-model = load_model()
+    if "show_fmaps" not in st.session_state:
+        st.session_state["show_fmaps"] = None
 
-sample_selection = st.selectbox(selected_text["choose_sample"], [selected_text["upload_label"]] + list(sample_images.keys()))
+    screen_width = streamlit_js_eval(js_expressions='screen.width', key = 'SCR')
 
-if sample_selection == selected_text["upload_label"]:
-    img = load_image()
-else:
-    img = load_image(sample_image=sample_images[sample_selection])
+    if screen_width:
+        comparison_width = 280 if screen_width < 400 else 700
 
-result = st.button(selected_text["colorize_button"], on_click=set_result_button_state)
+    sample_selection = st.selectbox(selected_text["choose_sample"], [selected_text["upload_label"]] + list(sample_images.keys()))
 
-### Perform colorization if the button was pressed
-if st.session_state["result"] and img is not None:
-    tic = time.time()
-    colorized = colorize(model, img)
-    toc = time.time()
-    
-    # Show the image comparison
-    image_comparison(
-        img.convert('L'),
-        colorized,
-        selected_text["original"],
-        selected_text["colorized"],
-        make_responsive=False
-    )
+    if sample_selection == selected_text["upload_label"]:
+        img = load_image()
+    else:
+        img = load_image(sample_image=sample_images[sample_selection])
 
-    ### Display the "Show feature maps" button and handle its state
-    show_fmaps = st.button(selected_text["see_feature_maps"], on_click=set_show_fmaps_button_state)
-    
-    ### Show feature maps if the button was pressed
-    if st.session_state["show_fmaps"]:
-        with st.spinner(selected_text["getting_feature_maps"]):
-            time.sleep(0.3)
-            plot_feature_maps()
+    result = st.button(selected_text["colorize_button"], on_click=set_result_button_state)
 
-    ### Provide a download button for the colorized image
-    buffer = BytesIO()
-    colorized.save(buffer, format="PNG")
-    byte_im = buffer.getvalue()
-    st.download_button(label=selected_text["download_button"], data=byte_im, file_name=f"{selected_text['filename']}.png", mime="image/png")
+    ### Perform colorization if the button was pressed
+    if st.session_state["result"] and img is not None:
+        tic = time.time()
+        colorized = colorize(img)
+        toc = time.time()
+
+        # Show the image comparison
+        image_comparison(
+            img.convert('L'),
+            colorized,
+            selected_text["original"],
+            selected_text["colorized"],
+            make_responsive=False,
+            width=comparison_width
+        )
+
+        ### Display the "Show feature maps" button and handle its state
+        show_fmaps = st.button(selected_text["see_feature_maps"], on_click=set_show_fmaps_button_state)
+        
+        ### Show feature maps if the button was pressed
+        if st.session_state["show_fmaps"]:
+            with st.spinner(selected_text["getting_feature_maps"]):
+                time.sleep(0.3)
+                plot_feature_maps()
+
+        ### Provide a download button for the colorized image
+        buffer = BytesIO()
+        colorized.save(buffer, format="PNG")
+        byte_im = buffer.getvalue()
+        st.download_button(label=selected_text["download_button"], data=byte_im, file_name=f"{selected_text['filename']}.png", mime="image/png")
