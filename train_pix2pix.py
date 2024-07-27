@@ -1,22 +1,22 @@
-import os
-import torch
-import random
-import numpy as np
-import pandas as pd
 import matplotlib.pyplot as plt
+import numpy as np
+import os
+import pandas as pd
+import random
 import time
-import torchvision.models as models
+import torch
 import scienceplots
 import yaml
+from build_model import build_model
 from copy import deepcopy
-from glob import glob
+from data_utils import get_dataloaders, LossValues
 from datetime import datetime
+from fastai.vision.models.unet import DynamicUnet
+from glob import glob
+from patch_gan import PatchGAN
 from tqdm import tqdm
 from torchvision import models 
-from fastai.vision.learner import create_body
-from fastai.vision.models.unet import DynamicUnet
-from data_utils import get_dataloaders, LossValues
-from patch_gan import PatchGAN
+from typing import Dict
 
 plt.style.use('science')
 
@@ -104,48 +104,15 @@ val_dl = get_dataloaders(batch_size=BATCH_SIZE,
                          image_size=IMAGE_SIZE, 
                          train=False)
 
-def build_model(backbone, n_input=1, n_output=2, size=256):
-
-    if backbone == 'resnet18':
-        backbone = models.resnet18(weights='DEFAULT')
-    
-    elif backbone == 'resnet34':
-        backbone = models.resnet34(weights='DEFAULT')
-    
-    elif backbone == 'convnext_tiny':
-        backbone = models.convnext_tiny(weights='DEFAULT')
-
-    elif backbone == 'efficientnet_v2_s':
-        backbone = models.efficientnet_v2_s(weights='DEFAULT')
-
-    elif backbone == 'shufflenet_v2_x0_5':
-        backbone = models.shufflenet_v2_x2_0(weights='DEFAULT')
-
-    elif backbone == 'shufflenet_v2_x1_0':
-        backbone = models.shufflenet_v2_x2_0(weights='DEFAULT')
-
-    elif backbone == 'shufflenet_v2_x1_5':
-        backbone = models.shufflenet_v2_x2_0(weights='DEFAULT')
-
-    elif backbone == 'shufflenet_v2_x2_0':
-        backbone = models.shufflenet_v2_x2_0(weights='DEFAULT')
-  
-    body = create_body(backbone, n_in=n_input, pretrained=True, cut=-2) 
-
-    if ACTIVATION_FUNCTION:
-        model = DynamicUnet(body, n_output, (size, size), self_attention=SELF_ATTENTION, act_cls=torch.nn.Mish).to(device)
-    else:
-        model = DynamicUnet(body, n_output, (size, size), self_attention=SELF_ATTENTION).to(device)
-
-    return model
-
-
 discriminator = PatchGAN(custom_weights_init=True).to(device)
 
 generator = build_model(backbone=BACKBONE, 
                         n_input=1, 
                         n_output=2, 
-                        size=IMAGE_SIZE).to(device)
+                        size=IMAGE_SIZE,
+                        activation_function=ACTIVATION_FUNCTION,
+                        self_attention=SELF_ATTENTION
+                        ).to(device)
 
 saved_model = torch.load(f"./experiments/{PRETRAINED_EXP}/model.pth")
 generator.load_state_dict(saved_model['model_state_dict'])
@@ -166,20 +133,20 @@ g_scaler = torch.cuda.amp.GradScaler()
 d_scaler = torch.cuda.amp.GradScaler()
 
 def train_and_val(loss_values: LossValues, 
-                  gen,
-                  disc, 
-                  train_dl, 
-                  val_dl,
-                  g_optim, 
-                  g_scaler,
-                  d_optim,
-                  d_scaler,
-                  criterion_adversarial,
-                  criterion_l1,  
-                  epochs,
-                  lambda_coef,
-                  device,
-                  patience) -> DynamicUnet:
+                  gen: DynamicUnet,
+                  disc: PatchGAN, 
+                  train_dl: torch.utils.data.DataLoader, 
+                  val_dl: torch.utils.data.DataLoader,
+                  g_optim: torch.optim.Adam, 
+                  g_scaler: torch.cuda.amp.GradScaler,
+                  d_optim: torch.optim.Adam,
+                  d_scaler: torch.cuda.amp.GradScaler,
+                  criterion_adversarial: torch.nn.BCEWithLogitsLoss,
+                  criterion_l1: torch.nn.L1Loss,  
+                  epochs: int,
+                  lambda_coef: float,
+                  device: str,
+                  patience) -> Dict:
 
     torch.cuda.empty_cache()
 
@@ -281,11 +248,11 @@ def train_and_val(loss_values: LossValues,
 
     return best_gen
 
-def save_train_results(model, 
-                       experiment_path, 
-                       backbone, 
-                       loss_values
-                       ):
+def save_train_results(model: DynamicUnet, 
+                       experiment_path: str, 
+                       backbone: str, 
+                       loss_values: LossValues
+                       ) -> None:
 
     model_path = f"{experiment_path}/model.pth"
     training_results_path = f"{experiment_path}/results-{backbone}.csv"

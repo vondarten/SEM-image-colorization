@@ -3,8 +3,9 @@ import numpy as np
 import torchvision.transforms as transforms
 from dataclasses import dataclass, field
 from PIL import Image
-from torch.utils.data import Dataset, DataLoader
 from skimage.color import rgb2lab, lab2rgb
+from torch.utils.data import Dataset, DataLoader
+from typing import Dict
 
 @dataclass
 class LossValues:
@@ -37,7 +38,7 @@ class SEMColorizationDataset(Dataset):
             self.transforms = transforms.Resize((image_size, image_size),  Image.BICUBIC)
 
     
-    def rgb_to_lab(self, img: np.ndarray):
+    def rgb_to_lab(self, img: np.ndarray) -> Dict[str, torch.Tensor]:
 
         img_lab = rgb2lab(np.array(img))
     
@@ -55,11 +56,11 @@ class SEMColorizationDataset(Dataset):
         return {'L': L, 'ab': ab}
     
 
-    def lab_to_rgb(self, L, ab):
+    def lab_to_rgb(self, L: torch.Tensor, ab: torch.Tensor) -> torch.Tensor:
         """
         Takes a batch of images in the Lab color space and converts them to RGB.
         """
-        
+
         # Denormalize
         L = (L + 1.0) * 50.0
         ab = ab * 255.0 - 128.0
@@ -74,23 +75,20 @@ class SEMColorizationDataset(Dataset):
     
 
     def __getitem__(self, idx):
-        
         img = Image.open(self.file_paths[idx]).convert('RGB')
         img = self.transforms(img)
-        
         return self.rgb_to_lab(img)
     
-
     def __len__(self):
         return len(self.file_paths)
     
 
-def get_dataloaders(batch_size=32, 
-                    n_workers=4, 
-                    pin_memory=True, 
-                    file_paths=None,
-                    image_size=256,
-                    train=True):
+def get_dataloaders(batch_size: int=32, 
+                    n_workers: int=4, 
+                    pin_memory: bool=True, 
+                    file_paths:str = '',
+                    image_size: int=256,
+                    train: bool=True) -> DataLoader:
     
     dataset = SEMColorizationDataset(file_paths=file_paths, 
                                      image_size=image_size,

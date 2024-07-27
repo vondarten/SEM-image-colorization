@@ -1,1 +1,2 @@
 experiments/gan-unet-resnet18-just-mish-4-2024-07-18-17:45:12/model.pth filter=lfs diff=lfs merge=lfs -text
+experiments/unet-resnet18-just-mish-2024-07-18-11:44:47/model.pth filter=lfs diff=lfs merge=lfs -text

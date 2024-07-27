@@ -3,19 +3,19 @@ import torch
 import time
 import numpy as np
 import matplotlib.pyplot as plt
-import torchvision.models as models
 import matplotlib.pyplot as plt
 import yaml
 import scienceplots
 import random
 import pandas as pd
+from build_model import build_model
 from tqdm import tqdm
-from fastai.vision.learner import create_body
 from fastai.vision.models.unet import DynamicUnet
 from copy import deepcopy
 from glob import glob
 from datetime import datetime
 from data_utils import get_dataloaders
+from typing import Dict, List
 # !pip install latex
 # sudo apt-get install texlive-latex-extra texlive-fonts-recommended dvipng cm-super
 plt.style.use('science')
@@ -23,14 +23,14 @@ plt.style.use('science')
 device = 'cuda' if torch.cuda.is_available() else 'cpu'
 print(f'[INFO] Device: {device} - Torch version: {torch.__version__}')
 
-EXPERIMENT_NAME = 'unet-resnet34-just-mish'
+EXPERIMENT_NAME = 'unet-resnet18-just-mish-aaaaa'
 SEED = 1337
 IMAGE_SIZE = 384
 BATCH_SIZE = 10
 PATIENCE = 50
 N_WORKERS = 1 
 DATASET_PATH = './'
-BACKBONE = 'resnet34'
+BACKBONE = 'resnet18'
 SELF_ATTENTION = False
 ACTIVATION_FUNCTION = 'Mish'
 CRITERION = torch.nn.L1Loss()
@@ -69,47 +69,15 @@ val_dl = get_dataloaders(batch_size=BATCH_SIZE,
                          image_size=IMAGE_SIZE, 
                          train=False)
 
-
-def build_model(backbone, n_input=1, n_output=2, size=256):
-
-    if backbone == 'resnet18':
-        backbone = models.resnet18(weights='DEFAULT')
-    
-    elif backbone == 'resnet34':
-        backbone = models.resnet34(weights='DEFAULT')
-    
-    elif backbone == 'shufflenet_v2_x0_5':
-        backbone = models.shufflenet_v2_x2_0(weights='DEFAULT')
-
-    elif backbone == 'shufflenet_v2_x1_0':
-        backbone = models.shufflenet_v2_x2_0(weights='DEFAULT')
-
-    elif backbone == 'shufflenet_v2_x1_5':
-        backbone = models.shufflenet_v2_x2_0(weights='DEFAULT')
-
-    elif backbone == 'shufflenet_v2_x2_0':
-        backbone = models.shufflenet_v2_x2_0(weights='DEFAULT')
-  
-    body = create_body(backbone, n_in=n_input, pretrained=True, cut=-2) 
-
-    if ACTIVATION_FUNCTION:
-        model = DynamicUnet(body, n_output, (size, size), self_attention=SELF_ATTENTION, act_cls=torch.nn.Mish).to(device)
-    else:
-        model = DynamicUnet(body, n_output, (size, size), self_attention=SELF_ATTENTION).to(device)
-
-    return model
-
-
-
-def train_and_val(loss_values_train, 
-                  loss_values_val, 
-                  model, 
-                  scaler,
-                  train_dl, 
-                  val_dl,
-                  optim, 
-                  criterion,  
-                  epochs) -> DynamicUnet:
+def train_and_val(loss_values_train: List[float], 
+                  loss_values_val: List[float], 
+                  model: DynamicUnet, 
+                  scaler: torch.cuda.amp.GradScaler,
+                  train_dl: torch.utils.data.DataLoader, 
+                  val_dl: torch.utils.data.DataLoader,
+                  optim: torch.optim.Adam, 
+                  criterion: torch.nn.L1Loss,  
+                  epochs) -> Dict:
 
     torch.cuda.empty_cache()
 
@@ -190,13 +158,13 @@ def train_and_val(loss_values_train,
 
     return best_model, best_epoch
 
-def save_train_results(model, 
-                       experiment_path, 
-                       backbone, 
-                       loss_values_train,
-                       loss_values_val,
-                       best_epoch=0
-                       ):
+def save_train_results(model: DynamicUnet, 
+                       experiment_path: str, 
+                       backbone: str, 
+                       loss_values_train: List,
+                       loss_values_val: List,
+                       best_epoch: int=0
+                       ) -> None:
 
     model_path = f"{experiment_path}/model.pth"
     training_results_path = f"{experiment_path}/results-{backbone}.csv"
@@ -231,7 +199,13 @@ def save_train_results(model,
         plt.savefig(f'{experiment_path}/loss_plot.png')
 
 
-model = build_model(backbone=BACKBONE, n_input=1, n_output=2, size=IMAGE_SIZE)
+model = build_model(backbone=BACKBONE, 
+                    n_input=1, 
+                    n_output=2, 
+                    size=IMAGE_SIZE,
+                    activation_function=ACTIVATION_FUNCTION,
+                    self_attention=SELF_ATTENTION
+                    ).to(device)
 
 pytorch_total_params = sum(p.numel() for p in model.parameters())
 print(f'[INFO] Total number of parameters: {pytorch_total_params}')
