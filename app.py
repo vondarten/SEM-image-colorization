@@ -1,3 +1,4 @@
+import gc
 import io
 import streamlit as st
 import numpy as np
@@ -171,6 +172,8 @@ def colorize(img: Image) -> Image:
         
         status.update(label=selected_text["colorized_image"].format(toc-tic), state="complete", expanded=False)
 
+        gc.collect()
+
         return Image.fromarray((colorized_img * 255).astype(np.uint8))
 
 
@@ -292,6 +295,8 @@ def plot_feature_maps() -> None:
         ### Release memory
         for feature_map in st.session_state["feature_maps"]:
             del feature_map
+
+    gc.collect()
 
 
 def set_result_button_state():
