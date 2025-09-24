@@ -1,0 +1,23 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.db
+
+# Virtual environments
+.venv/
+env/
+venv/
+
+# Package managers
+.uv-cache/
+pip-wheel-metadata/
+*.egg-info/
+
+# Git
+.git
+.gitignore
+
+# Streamlit cache
+.streamlit/

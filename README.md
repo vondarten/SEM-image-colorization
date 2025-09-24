@@ -20,9 +20,14 @@ The colorization is made by leveraging the LAB color space instead of RGB. The o
 ![Diagram](./colorization-diagram.png)
 
 # Setup the Environment
-Create the conda environment with:
 
-`conda create --name colorization --file environment.yml`
+If you're using uv:
+
+`uv sync`
+
+If you're using pip, create a venv with python >=3.10 and install the dependencies with:
+
+`pip install -r requirements.txt`
 
 # Steps to reproduce
 The training happens in two stages. 
@@ -36,7 +41,22 @@ Then, the cGAN is trained to improve the Generator at its best. So the pretraine
 To run the cGAN training, run:
 `train_pix2pix.py`
 
-# Streamlit
-Start the server with:
+# Web app
+## Option 1 - Using Docker
+
+Build the image:
+
+`sudo docker build -t sem_colorizer .`
+
+Run the container:
+
+`sudo docker run -p 8501:8501 sem_colorizer`
+
+## Option 2 — Running Locally
+With uv:
+
+`uv run streamlit run app.py`
+
+Or with Streamlit directly:
 
 `streamlit run app.py`
