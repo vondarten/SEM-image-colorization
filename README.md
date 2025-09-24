@@ -1,7 +1,17 @@
 # SEM Image Colorization
-### Colorize Scanning Electron Microscope (SEM) images automatically using Deep Learning & Computer Vision
+Colorize Scanning Electron Microscope (SEM) images automatically using Deep Learning & Computer Vision
 
-This is a pilot project. At the moment, the model is capable of colorizing pollen images exclusively because pollens are more abundant in the available data from Uniso's SEM. The goal is to progressively train it with more classes to become generalist.
+# Web App
+![WebApp](./samples/webapp.png)
+
+### Samples
+Original (grayscale) images and their colorized versions produced by this project
+
+![Sample1](./samples/Sample1.jpg)
+
+![Sample2](./samples/Sample2.jpg)
+
+![Sample3](./samples/Sample3.jpg)
 
 # The colorization problem
 SEM images are, by the nature of the electron microscopes, color absent. Colorization is a important step to any SEM image because it helps us humans to better interpret it since the human brain works better when colors are present. However, the colorization process is slow and manual, demanding time and effort from researchers. The goal of this project is to create an automatic way of colorization.
@@ -41,7 +51,8 @@ Then, the cGAN is trained to improve the Generator at its best. So the pretraine
 To run the cGAN training, run:
 `train_pix2pix.py`
 
-# Web app
+# Run the Web app
+
 ## Option 1 - Using Docker
 
 Build the image:
