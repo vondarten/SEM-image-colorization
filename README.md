@@ -1,10 +1,7 @@
 # SEM Image Colorization
 Colorize Scanning Electron Microscope (SEM) images automatically using Deep Learning & Computer Vision
 
-# Web App
-![WebApp](./samples/webapp.png)
-
-### Samples
+### Results
 Original (grayscale) images and their colorized versions produced by this project
 
 ![Sample1](./samples/Sample1.jpg)
@@ -52,6 +49,7 @@ To run the cGAN training, run:
 `train_pix2pix.py`
 
 # Run the Web app
+![WebApp](./samples/webapp.png)
 
 ## Option 1 - Using Docker
 
