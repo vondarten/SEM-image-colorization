@@ -36,17 +36,6 @@ If you're using pip, create a venv with python >=3.10 and install the dependenci
 
 `pip install -r requirements.txt`
 
-# Steps to reproduce
-The training happens in two stages. 
-
-At first, the Generator is trained individually by being fine-tuned on the data using L1 loss as criterion. By doing so, it learns the context of the data and tune its parameters to better minimize the L1 loss between the generated outputs and the ground truth.
-
-To pretrain the Generator, run the `pretrain.py` script with the desired hyperparameters. 
-
-Then, the cGAN is trained to improve the Generator at its best. So the pretrained Generator is again fine-tuned from the pretrain's checkpoint.
-
-To run the cGAN training, run:
-`train_pix2pix.py`
 
 # Run the Web app
 ![WebApp](./samples/webapp.png)
@@ -70,3 +59,15 @@ http://localhost:8501
 To stop the containers, run:
     
 `docker-compose down`
+
+# Steps to reproduce
+The training happens in two stages. 
+
+At first, the Generator is trained individually by being fine-tuned on the data using L1 loss as criterion. By doing so, it learns the context of the data and tune its parameters to better minimize the L1 loss between the generated outputs and the ground truth.
+
+To pretrain the Generator, run the `pretrain.py` script with the desired hyperparameters. 
+
+Then, the cGAN is trained to improve the Generator at its best. So the pretrained Generator is again fine-tuned from the pretrain's checkpoint.
+
+To run the cGAN training, run:
+`train_pix2pix.py`

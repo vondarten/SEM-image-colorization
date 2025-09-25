@@ -3,3 +3,5 @@ temp/*
 *.zip
 .venv
 .env
+__pycache__
+.devcontainer
