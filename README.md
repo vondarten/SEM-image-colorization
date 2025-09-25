@@ -51,21 +51,22 @@ To run the cGAN training, run:
 # Run the Web app
 ![WebApp](./samples/webapp.png)
 
-## Option 1 - Using Docker
+This is the recommended way to run the application, as it automatically sets up both the backend API and the frontend web app.
 
-Build the image:
+### 1. Build and Run the Containers:
 
-`sudo docker build -t sem_colorizer .`
+From project's root directory, run the following command. The --build flag is only necessary the first time you run it or after you change dependencies.
 
-Run the container:
+`docker-compose up --build`
 
-`sudo docker run -p 8501:8501 sem_colorizer`
+### 2. Access the Web App:
 
-## Option 2 — Running Locally
-With uv:
+Once the containers are running, open your web browser and navigate to:
 
-`uv run streamlit run app.py`
+http://localhost:8501
+ 
+### 3. Stopping the Application:
 
-Or with Streamlit directly:
-
-`streamlit run app.py`
+To stop the containers, run:
+    
+`docker-compose down`

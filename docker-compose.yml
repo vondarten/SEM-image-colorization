@@ -1,0 +1,29 @@
+version: '3.8'
+
+services:
+  # FastAPI backend
+  api:
+    build: .
+    container_name: sem_colorizer_api
+    command: >
+      uv run uvicorn api.main:app --host 0.0.0.0 --port 8000
+    ports:
+      - "8000:8000"
+    env_file:
+      - .env
+
+  # Streamlit frontend
+  app:
+    build: .
+    container_name: sem_colorizer_app
+    command: >
+      uv run streamlit run app.py
+    ports:
+      - "8501:8501"
+    env_file:
+      - .env
+    environment:
+      # Leverage Docker Compose DNS resolution
+      - FASTAPI_URL=http://api:8000/colorize
+    depends_on:
+      - api

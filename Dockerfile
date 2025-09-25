@@ -18,13 +18,11 @@ COPY . .
 
 RUN uv sync --frozen
 
-# Expose Streamlit default port
+# Expose ports for both services
 EXPOSE 8501
+EXPOSE 8000
 
 # Streamlit needs to know it's running in a container
 ENV STREAMLIT_SERVER_HEADLESS=true
 ENV STREAMLIT_SERVER_PORT=8501
 ENV STREAMLIT_SERVER_ADDRESS=0.0.0.0
-
-# Run the Streamlit app through uv
-CMD ["uv", "run", "streamlit", "run", "app.py"]
