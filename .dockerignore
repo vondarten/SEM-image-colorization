@@ -21,3 +21,5 @@ pip-wheel-metadata/
 
 # Streamlit cache
 .streamlit/
+
+.env

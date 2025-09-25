@@ -1,4 +1,5 @@
 temp/*
-*__pycache__/*
+*/*__pycache__/*
 *.zip
 .venv
+.env
