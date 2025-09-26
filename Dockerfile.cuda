@@ -1,0 +1,36 @@
+# Use an official NVIDIA CUDA base image
+FROM nvidia/cuda:12.1.1-cudnn8-runtime-ubuntu22.04
+
+# Set up non-interactive frontend for package installations
+ENV DEBIAN_FRONTEND=noninteractive
+
+# Install Python 3.10, pip, and other system dependencies
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    python3.10 \
+    python3-pip \
+    curl \
+    build-essential \
+    git && \
+    rm -rf /var/lib/apt/lists/*
+
+# Install and configure uv
+RUN curl -LsSf https://astral.sh/uv/install.sh | sh
+ENV PATH="/root/.local/bin:${PATH}"
+
+# Set working directory
+WORKDIR /app
+
+# Copy project files
+COPY . .
+
+# Install Python dependencies using uv
+RUN uv sync --frozen
+
+# Expose ports for both services
+EXPOSE 8501
+EXPOSE 8000
+
+# Streamlit configuration
+ENV STREAMLIT_SERVER_HEADLESS=true
+ENV STREAMLIT_SERVER_PORT=8501
+ENV STREAMLIT_SERVER_ADDRESS=0.0.0.0

@@ -40,21 +40,37 @@ If you're using pip, create a venv with python >=3.10 and install the dependenci
 # Run the Web app
 ![WebApp](./samples/webapp.png)
 
-This is the recommended way to run the application, as it automatically sets up both the backend API and the frontend web app.
+This is the recommended way to run the application, as it automatically sets up both the backend API and the frontend web app using Docker. You can choose between a simpler CPU-only or CUDA-accelerated build.
 
-### 1. Build and Run the Containers:
+### Option 1: Run with CPU (Default)
 
-From project's root directory, run the following command. The --build flag is only necessary the first time you run it or after you change dependencies.
+This method works on any system with Docker installed and is best if you do not have an NVIDIA GPU.
+
+### Build and Run the Containers:
+From the project's root directory, run the following command. The --build flag is only necessary the first time you run it or after changing dependencies.
 
 `docker-compose up --build`
 
-### 2. Access the Web App:
+### Option 2: Run with NVIDIA GPU (Recommended for Performance)
+Use this method for significantly faster image colorization if you have a compatible NVIDIA GPU.
 
-Once the containers are running, open your web browser and navigate to:
+Prerequisites:
 
-http://localhost:8501
- 
-### 3. Stopping the Application:
+* An NVIDIA GPU
+
+* The latest NVIDIA drivers for your OS
+
+* The NVIDIA Container Toolkit installed on your system.
+
+### Build and Run the Containers:
+This command merges the base docker-compose.yml with the docker-compose.cuda.yml override file, which enables GPU access for the API service.
+
+`docker-compose -f docker-compose.yml -f docker-compose.cuda.yml up --build`
+
+### Access the Web App:
+Once the containers are running, open your web browser and navigate to: http://localhost:8501
+
+### Stopping the Application:
 
 To stop the containers, run:
     

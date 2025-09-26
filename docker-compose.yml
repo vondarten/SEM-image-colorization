@@ -3,7 +3,9 @@ version: '3.8'
 services:
   # FastAPI backend
   api:
-    build: .
+    build:
+      context: .
+      dockerfile: Dockerfile
     container_name: sem_colorizer_api
     command: >
       uv run uvicorn api.main:app --host 0.0.0.0 --port 8000
@@ -14,7 +16,9 @@ services:
 
   # Streamlit frontend
   app:
-    build: .
+    build:
+      context: .
+      dockerfile: Dockerfile
     container_name: sem_colorizer_app
     command: >
       uv run streamlit run app.py
