@@ -65,7 +65,10 @@ def load_image(sample_image=None) -> Image:
     if sample_image:
         return Image.open(sample_image)
 
-    uploaded_file = st.file_uploader(label='')
+    uploaded_file = st.file_uploader(
+        label=selected_text["upload_label"],
+        label_visibility="collapsed"
+    )
     try:
         if uploaded_file is not None:
             image_data = uploaded_file.getvalue()

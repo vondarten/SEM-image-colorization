@@ -1,7 +1,9 @@
 import numpy as np
 import torch
+import warnings
 from skimage.color import rgb2lab, lab2rgb
 from typing import Dict
+warnings.filterwarnings("ignore", category=UserWarning)
 
 def lab_to_rgb(L, ab) -> np.ndarray:
 
