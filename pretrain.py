@@ -23,7 +23,7 @@ plt.style.use('science')
 device = 'cuda' if torch.cuda.is_available() else 'cpu'
 print(f'[INFO] Device: {device} - Torch version: {torch.__version__}')
 
-EXPERIMENT_NAME = 'unet-resnet18-just-mish-aaaaa'
+EXPERIMENT_NAME = 'unet-resnet18-just-mish-phage-single-color2'
 SEED = 1337
 IMAGE_SIZE = 384
 BATCH_SIZE = 10

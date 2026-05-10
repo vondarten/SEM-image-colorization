@@ -24,12 +24,12 @@ device = 'cuda' if torch.cuda.is_available() else 'cpu'
 
 print(f'[INFO] Device: {device} - Torch version: {torch.__version__}')
 
-EXPERIMENT_NAME = 'gan-unet-resnet18-just-mish-4-pt3'
-PRETRAINED_EXP = "unet-resnet18-just-mish-2024-07-18-11:44:47"
+EXPERIMENT_NAME = 'gan-unet-resnet18-just-mish-phage-single-color'
+PRETRAINED_EXP = "unet-resnet18-just-mish-phage-single-color2-2026-05-09-16:25:11"
 SEED = 1337
 IMAGE_SIZE = 384
 BATCH_SIZE = 16
-PATIENCE = 100
+PATIENCE = 150
 N_WORKERS = max(0, os.cpu_count() - 4)
 DATASET_PATH = './'
 BACKBONE = 'resnet18'
@@ -42,8 +42,8 @@ CRITERION_G = torch.nn.L1Loss
 ADAM_B1 = 0.5
 ADAM_B2 = 0.999
 LAMBDA = 50
-LR_G = 3e-5
-LR_D = 1e-4
+LR_G = 2e-5
+LR_D = 0.5e-4
 EPOCHS = 1000
 
 experiment_path = F'./experiments/{EXPERIMENT_NAME}-{datetime.now().strftime("%Y-%m-%d-%H:%M:%S")}'

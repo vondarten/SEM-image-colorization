@@ -25,14 +25,18 @@ class SEMColorizationDataset(Dataset):
     def __init__(self, file_paths, image_size, train=True):
     
         self.file_paths = file_paths
+        self.train = train
+        self.l_noise_prob = 0.5
+        self.l_noise_std = 0.1
 
         if train:
             self.transforms = transforms.Compose([
                 transforms.Resize((image_size, image_size), Image.BICUBIC),
-                transforms.RandomVerticalFlip(p=0.2),
-                transforms.RandomHorizontalFlip(p=0.2),
-                transforms.RandomPerspective(distortion_scale=0.1),
-                transforms.RandomRotation(degrees=10),
+                transforms.RandomResizedCrop((image_size, image_size), scale=(0.65, 1.0), ratio=(1.0, 1.0), interpolation=Image.BICUBIC),
+                transforms.RandomVerticalFlip(p=0.5),
+                transforms.RandomHorizontalFlip(p=0.5),
+                transforms.RandomPerspective(distortion_scale=0.3),
+                transforms.RandomRotation(degrees=50),
             ])
         else:
             self.transforms = transforms.Resize((image_size, image_size),  Image.BICUBIC)
@@ -54,6 +58,13 @@ class SEMColorizationDataset(Dataset):
         ab = (ab + 128.0) / 255.0
         
         return {'L': L, 'ab': ab}
+
+    def add_l_noise(self, L: torch.Tensor) -> torch.Tensor:
+        if torch.rand(1).item() >= self.l_noise_prob:
+            return L
+
+        noise = torch.randn_like(L) * self.l_noise_std
+        return torch.clamp(L + noise, min=-1.0, max=1.0)
     
 
     def lab_to_rgb(self, L: torch.Tensor, ab: torch.Tensor) -> torch.Tensor:
@@ -77,7 +88,12 @@ class SEMColorizationDataset(Dataset):
     def __getitem__(self, idx):
         img = Image.open(self.file_paths[idx]).convert('RGB')
         img = self.transforms(img)
-        return self.rgb_to_lab(img)
+        sample = self.rgb_to_lab(img)
+
+        if self.train:
+            sample['L'] = self.add_l_noise(sample['L'])
+
+        return sample
     
     def __len__(self):
         return len(self.file_paths)

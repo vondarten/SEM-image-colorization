@@ -5,3 +5,6 @@ temp/*
 .env
 __pycache__
 .devcontainer
+dataset*/*
+*.ipynb
+*local_*
