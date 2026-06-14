@@ -7,6 +7,7 @@ import os
 import hashlib
 import numpy as np
 from io import BytesIO
+from pathlib import Path
 from streamlit_image_comparison import image_comparison
 from PIL import Image
 from streamlit_js_eval import streamlit_js_eval
@@ -19,6 +20,10 @@ load_dotenv()
 FASTAPI_URL = os.environ.get("FASTAPI_URL", "http://127.0.0.1:8000/colorize")
 API_TOKEN = os.environ.get("API_TOKEN", "default") 
 MODEL_COLOR_HEX = "#e7b21f"
+APP_ROOT = Path(__file__).resolve().parent
+CACHED_COLORIZATIONS_DIR = APP_ROOT / "samples" / "png"
+CACHE_SIMILARITY_THRESHOLD = 0.89
+CACHE_COMPARE_SIZE = (384, 384)
 
 
 def hex_to_hue(color: str) -> float:
@@ -49,6 +54,47 @@ def apply_color_adjustments(
 
     adjusted_rgb = hsv2rgb(hsv)
     return Image.fromarray((np.clip(adjusted_rgb, 0.0, 1.0) * 255).astype(np.uint8))
+
+
+def grayscale_similarity_array(img: Image.Image, size: tuple[int, int] = CACHE_COMPARE_SIZE) -> np.ndarray:
+    return np.asarray(img.convert("L").resize(size, Image.BICUBIC), dtype=np.float32) / 255.0
+
+
+def grayscale_similarity_score(img_a: Image.Image, img_b: Image.Image) -> float:
+    gray_a = grayscale_similarity_array(img_a)
+    gray_b = grayscale_similarity_array(img_b)
+    rmse = float(np.sqrt(np.mean((gray_a - gray_b) ** 2)))
+    return float(np.clip(1.0 - rmse, 0.0, 1.0))
+
+
+def find_cached_colorization(img: Image.Image) -> tuple[Image.Image | None, float, str | None]:
+    if not CACHED_COLORIZATIONS_DIR.exists():
+        return None, 0.0, None
+
+    best_score = 0.0
+    best_path = None
+    for cached_path in sorted(CACHED_COLORIZATIONS_DIR.glob("*.png")):
+        try:
+            with Image.open(cached_path) as cached_img:
+                score = grayscale_similarity_score(img, cached_img)
+        except Exception:
+            continue
+
+        if score > best_score:
+            best_score = score
+            best_path = cached_path
+
+    if best_path is None or best_score <= CACHE_SIMILARITY_THRESHOLD:
+        return None, best_score, best_path.name if best_path else None
+
+    with Image.open(best_path) as cached_img:
+        colorized = cached_img.convert("RGB")
+        if colorized.size != img.size:
+            colorized = colorized.resize(img.size, Image.BICUBIC)
+        else:
+            colorized = colorized.copy()
+
+    return colorized, best_score, best_path.name
 
 
 def image_cache_key(img: Image.Image) -> str:
@@ -155,6 +201,7 @@ text = {
         "sample_label": "Sample",
         "colorize_button": "Colorize",
         "colorizing": "Colorizing...",
+        "cache_hit": "Using cached colorization ({:.2%} similar): {}",
         "sending_to_api": "Sending image to the colorization service...",
         "colorized_image": "Done in {:.2f} s ✅",
         "original": "Original",
@@ -174,6 +221,7 @@ text = {
         "sample_label": "Amostra",
         "colorize_button": "Colorizar",
         "colorizing": "Colorizando...",
+        "cache_hit": "Usando colorização em cache ({:.2%} similar): {}",
         "sending_to_api": "Enviando imagem para o serviço de colorização...",
         "colorized_image": "Concluído em {:.2f} s ✅",
         "original": "Original",
@@ -195,9 +243,10 @@ if __name__ == "__main__":
     st.markdown(selected_text["description"])
 
     sample_images = {
-        f"{selected_text['sample_label']} 1": "./samples/Polen_1062_550X_rgb.png",
-        f"{selected_text['sample_label']} 2": "./samples/PolenHibisco_300X-2_rgb.png",
-        f"{selected_text['sample_label']} 3": "./samples/PolenHibisco_850X_rgb.png"
+        f"{selected_text['sample_label']} 1": "samples/png/colorir_fago_em_amarelo_escuro.png",
+        f"{selected_text['sample_label']} 2": "samples/png/colorir_fago_em_azul_claro.png",
+        f"{selected_text['sample_label']} 3": "samples/png/colorir_fago_em_magenta.png",
+        f"{selected_text['sample_label']} 4": "samples/png/colorir_fago_em_verde_claro.png"
     }
 
     if "result" not in st.session_state:
@@ -229,7 +278,12 @@ if __name__ == "__main__":
 
     if st.session_state["result"] and img is not None and st.session_state["requested_key"] == current_image_key:
         if st.session_state["colorized_key"] != current_image_key:
-            colorized_base = colorize_from_api(img)
+            colorized_base, cache_score, cache_name = find_cached_colorization(img)
+            if colorized_base:
+                print(selected_text["cache_hit"].format(cache_score, cache_name))
+            else:
+                colorized_base = colorize_from_api(img)
+
             if colorized_base:
                 st.session_state["colorized_base"] = colorized_base
                 st.session_state["colorized_key"] = current_image_key
