@@ -16,7 +16,7 @@ from glob import glob
 from patch_gan import PatchGAN
 from tqdm import tqdm
 from torchvision import models 
-from typing import Dict
+from typing import Dict, Tuple
 
 plt.style.use('science')
 
@@ -24,26 +24,29 @@ device = 'cuda' if torch.cuda.is_available() else 'cpu'
 
 print(f'[INFO] Device: {device} - Torch version: {torch.__version__}')
 
-EXPERIMENT_NAME = 'gan-unet-resnet18-just-mish-phage-single-color'
-PRETRAINED_EXP = "unet-resnet18-just-mish-phage-single-color2-2026-05-09-16:25:11"
+EXPERIMENT_NAME = 'gan-unet-resnet18-just-mish-phage-single-color-384-weighted-detail-loss-v16'
+PRETRAINED_EXP = "unet-resnet18-just-mish-phage-best-384-weighted-detail-loss-v10-2026-06-02-08:11:24"
 SEED = 1337
 IMAGE_SIZE = 384
-BATCH_SIZE = 16
-PATIENCE = 150
+BATCH_SIZE = 10
+PATIENCE = 300
 N_WORKERS = max(0, os.cpu_count() - 4)
-DATASET_PATH = './'
+DATASET_PATH = './dataset_finetune_best_with_ai_aug_v2'
 BACKBONE = 'resnet18'
 SELF_ATTENTION = False
 ACTIVATION_FUNCTION = 'Mish'
 OPTIM_D = torch.optim.Adam
 OPTIM_G = torch.optim.Adam
 CRITERION_D = torch.nn.BCEWithLogitsLoss 
-CRITERION_G = torch.nn.L1Loss
+ACTIVE_WEIGHT = 3.0
+CHROMA_SCALE = 4.0
+GRADIENT_WEIGHT = 0.1
+CRITERION_G = None
 ADAM_B1 = 0.5
 ADAM_B2 = 0.999
 LAMBDA = 50
-LR_G = 2e-5
-LR_D = 0.5e-4
+LR_G = 0.0001
+LR_D = 0.00008
 EPOCHS = 1000
 
 experiment_path = F'./experiments/{EXPERIMENT_NAME}-{datetime.now().strftime("%Y-%m-%d-%H:%M:%S")}'
@@ -66,7 +69,10 @@ hyperparams = {
     'OPTIM_D': OPTIM_D.__name__,
     'OPTIM_G': OPTIM_G.__name__,
     'CRITERION_D': CRITERION_D.__name__,
-    'CRITERION_G': CRITERION_G.__name__,
+    'CRITERION_G': 'ColorizationDetailLoss',
+    'ACTIVE_WEIGHT': ACTIVE_WEIGHT,
+    'CHROMA_SCALE': CHROMA_SCALE,
+    'GRADIENT_WEIGHT': GRADIENT_WEIGHT,
     'ADAM_B1': ADAM_B1,
     'ADAM_B2': ADAM_B2,
     'LAMBDA': LAMBDA,
@@ -117,17 +123,69 @@ generator = build_model(backbone=BACKBONE,
 saved_model = torch.load(f"./experiments/{PRETRAINED_EXP}/model.pth")
 generator.load_state_dict(saved_model['model_state_dict'])
 
+class ChromaWeightedL1Loss(torch.nn.Module):
+    def __init__(self, neutral: float=128 / 255, active_weight: float=8.0, chroma_scale: float=12.0):
+        super().__init__()
+        self.neutral = neutral
+        self.active_weight = active_weight
+        self.chroma_scale = chroma_scale
+
+    def forward(self, pred: torch.Tensor, target: torch.Tensor) -> torch.Tensor:
+        chroma = torch.sqrt(
+            (target[:, 0:1] - self.neutral) ** 2 +
+            (target[:, 1:2] - self.neutral) ** 2
+        )
+        weights = 1.0 + self.active_weight * torch.clamp(chroma * self.chroma_scale, 0.0, 1.0)
+        return (torch.abs(pred - target) * weights).mean()
+
+
+class ABGradientLoss(torch.nn.Module):
+    def forward(self, pred: torch.Tensor, target: torch.Tensor) -> torch.Tensor:
+        pred_dx = pred[:, :, :, 1:] - pred[:, :, :, :-1]
+        pred_dy = pred[:, :, 1:, :] - pred[:, :, :-1, :]
+        target_dx = target[:, :, :, 1:] - target[:, :, :, :-1]
+        target_dy = target[:, :, 1:, :] - target[:, :, :-1, :]
+
+        return torch.abs(pred_dx - target_dx).mean() + torch.abs(pred_dy - target_dy).mean()
+
+
+class ColorizationDetailLoss(torch.nn.Module):
+    def __init__(self, active_weight: float=8.0, chroma_scale: float=12.0, gradient_weight: float=0.2):
+        super().__init__()
+        self.gradient_weight = gradient_weight
+        self.chroma_l1 = ChromaWeightedL1Loss(active_weight=active_weight, chroma_scale=chroma_scale)
+        self.gradient = ABGradientLoss()
+
+    def forward(self, pred: torch.Tensor, target: torch.Tensor) -> torch.Tensor:
+        pred_2d = pred.squeeze(2) if pred.ndim == 5 else pred
+        target_2d = target.squeeze(2) if target.ndim == 5 else target
+        return self.chroma_l1(pred, target) + self.gradient_weight * self.gradient(pred_2d, target_2d)
+
+
 criterion_adversarial = CRITERION_D() 
-criterion_l1 = CRITERION_G()
+criterion_l1 = ColorizationDetailLoss(
+    active_weight=ACTIVE_WEIGHT,
+    chroma_scale=CHROMA_SCALE,
+    gradient_weight=GRADIENT_WEIGHT,
+)
 
 lambda_coef = LAMBDA
-g_optim = OPTIM_G(generator.parameters(),
-                  lr=LR_G,
-                  betas=(ADAM_B1, ADAM_B2))
+if ADAM_B1 is not None and ADAM_B2 is not None:
+    g_optim = OPTIM_G(generator.parameters(),
+                    lr=LR_G,
+                    betas=(ADAM_B1, ADAM_B2))
 
-d_optim = OPTIM_D(discriminator.parameters(),
-                  lr=LR_D,
-                  betas=(ADAM_B1, ADAM_B2))
+    d_optim = OPTIM_D(discriminator.parameters(),
+                    lr=LR_D,
+                    betas=(ADAM_B1, ADAM_B2))
+else:
+    g_optim = OPTIM_G(generator.parameters(),
+                    lr=LR_G
+                    )
+
+    d_optim = OPTIM_D(discriminator.parameters(),
+                    lr=LR_D
+                    )
 
 g_scaler = torch.cuda.amp.GradScaler()
 d_scaler = torch.cuda.amp.GradScaler()
@@ -142,16 +200,18 @@ def train_and_val(loss_values: LossValues,
                   d_optim: torch.optim.Adam,
                   d_scaler: torch.cuda.amp.GradScaler,
                   criterion_adversarial: torch.nn.BCEWithLogitsLoss,
-                  criterion_l1: torch.nn.L1Loss,  
+                  criterion_l1: torch.nn.Module,  
                   epochs: int,
                   lambda_coef: float,
                   device: str,
-                  patience) -> Dict:
+                  patience) -> Tuple[Dict, Dict]:
 
     torch.cuda.empty_cache()
 
     best_gen = deepcopy(gen.state_dict())
+    best_train_gen = deepcopy(gen.state_dict())
     min_val_loss = np.inf
+    min_train_loss = np.inf
     patience_counter = 0
 
     for i in range(epochs):
@@ -211,6 +271,13 @@ def train_and_val(loss_values: LossValues,
 
         loss_values.train_disc_history.append(loss_values.train_disc)
         loss_values.train_gen_history.append(loss_values.train_gen)
+        loss_values.train_gen_l1_history.append(loss_values.train_gen_l1)
+
+        if loss_values.train_gen_l1 < min_train_loss:
+            best_train_gen = deepcopy(gen.state_dict())
+            print(f'[INFO] New best train model found [{loss_values.train_gen_l1:5f}]. Updating train state dict...\n')
+            min_train_loss = loss_values.train_gen_l1
+            loss_values.best_train_epoch = i
 
         ### Validation Stage
         loss_batch = 0.0
@@ -246,15 +313,23 @@ def train_and_val(loss_values: LossValues,
                 print(f"[INFO] Early stopping triggered at epoch {loss_values.best_epoch}, best validation loss: {min_val_loss:.4f}")
                 break
 
-    return best_gen
+    return best_gen, best_train_gen
+
+def state_dict_to_half(state_dict: Dict) -> Dict:
+    return {
+        key: value.detach().half() if torch.is_floating_point(value) else value.detach()
+        for key, value in state_dict.items()
+    }
 
 def save_train_results(model: DynamicUnet, 
                        experiment_path: str, 
                        backbone: str, 
-                       loss_values: LossValues
+                       loss_values: LossValues,
+                       train_model_state_dict: Dict
                        ) -> None:
 
     model_path = f"{experiment_path}/model.pth"
+    train_model_path = f"{experiment_path}/model_train.pth"
     training_results_path = f"{experiment_path}/results-{backbone}.csv"
 
     model = model.half() 
@@ -262,14 +337,23 @@ def save_train_results(model: DynamicUnet,
     torch.save({
         'epoch': loss_values.best_epoch,
         'model_state_dict': model.state_dict(),
-        'val_loss': loss_values.val
+        'val_loss': min(loss_values.val_history)
         }, model_path)
     
     print(f'[INFO] Saved model weights to {model_path}.')
 
+    torch.save({
+        'epoch': loss_values.best_train_epoch,
+        'model_state_dict': state_dict_to_half(train_model_state_dict),
+        'train_loss': min(loss_values.train_gen_l1_history)
+        }, train_model_path)
+    
+    print(f'[INFO] Saved train-best model weights to {train_model_path}.')
+
     df = pd.DataFrame({
         'train_loss_discriminator': loss_values.train_disc_history,
         'train_loss_generator': loss_values.train_gen_history,
+        'train_loss_generator_l1': loss_values.train_gen_l1_history,
         'val_loss': loss_values.val_history
     })
 
@@ -317,21 +401,21 @@ tic = time.time()
 
 loss_values = LossValues()
 
-best_generator = train_and_val(loss_values,
-                               generator,
-                               discriminator, 
-                               train_dl,
-                               val_dl,
-                               g_optim, 
-                               g_scaler,
-                               d_optim,
-                               d_scaler,
-                               criterion_adversarial,
-                               criterion_l1,  
-                               EPOCHS,
-                               LAMBDA,
-                               device,
-                               PATIENCE)
+best_generator, best_train_generator = train_and_val(loss_values,
+                                                     generator,
+                                                     discriminator, 
+                                                     train_dl,
+                                                     val_dl,
+                                                     g_optim, 
+                                                     g_scaler,
+                                                     d_optim,
+                                                     d_scaler,
+                                                     criterion_adversarial,
+                                                     criterion_l1,  
+                                                     EPOCHS,
+                                                     LAMBDA,
+                                                     device,
+                                                     PATIENCE)
 
 generator.load_state_dict(best_generator)
 
@@ -340,7 +424,8 @@ print(f'Training took {round((time.time() - tic)/60, 2)} minutes.')
 save_train_results(generator,
                    experiment_path,
                    BACKBONE,
-                   loss_values
+                   loss_values,
+                   best_train_generator
                    )
 
 print(f'[INFO] Finished training.')

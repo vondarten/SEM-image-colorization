@@ -83,6 +83,8 @@ At first, the Generator is trained individually by being fine-tuned on the data 
 
 To pretrain the Generator, run the `pretrain.py` script with the desired hyperparameters. 
 
+The pretrain script is currently configured to try the DINOv3 ConvNeXt Tiny backbone with `BACKBONE = 'dinov3_convnext_tiny'`. If `checkpoints/dinov3_convnext_tiny_pretrain_lvd1689m-21b726bb.pth` exists, it is used automatically. Otherwise, the model loader falls back to PyTorch Hub. You can also set `DINOV3_WEIGHTS=/path/to/checkpoint.pth` to use another checkpoint, or set `DINOV3_PRETRAINED=0` to smoke-test or train the architecture from random initialization.
+
 Then, the cGAN is trained to improve the Generator at its best. So the pretrained Generator is again fine-tuned from the pretrain's checkpoint.
 
 To run the cGAN training, run:

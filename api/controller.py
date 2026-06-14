@@ -23,7 +23,7 @@ class ColorizationController:
         basemodel = models.resnet18(weights=None)
         body = create_body(basemodel, n_in=1, pretrained=False, cut=-2) 
         model = DynamicUnet(body, 2, (384, 384), self_attention=False, act_cls=torch.nn.Mish).to(self.device)
-        experiment = 'gan-unet-resnet18-just-mish-4-2024-07-18-17:45:12'
+        experiment = 'gan-unet-resnet18-just-mish-phage-single-color-384-weighted-detail-loss-v10-2026-06-02-16:25:21'
         
         model_path = f"./experiments/{experiment}/model.pth"
         if not os.path.exists(model_path):

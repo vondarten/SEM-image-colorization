@@ -23,20 +23,23 @@ plt.style.use('science')
 device = 'cuda' if torch.cuda.is_available() else 'cpu'
 print(f'[INFO] Device: {device} - Torch version: {torch.__version__}')
 
-EXPERIMENT_NAME = 'unet-resnet18-just-mish-phage-single-color2'
+EXPERIMENT_NAME = 'unet-resnet18-just-mish-phage-best-384-weighted-detail-loss-v10'
 SEED = 1337
 IMAGE_SIZE = 384
 BATCH_SIZE = 10
-PATIENCE = 50
+PATIENCE = 100
 N_WORKERS = 1 
-DATASET_PATH = './'
+DATASET_PATH = './dataset_finetune_best_with_ai_aug'
 BACKBONE = 'resnet18'
 SELF_ATTENTION = False
 ACTIVATION_FUNCTION = 'Mish'
-CRITERION = torch.nn.L1Loss()
+ACTIVE_WEIGHT = 8.0
+CHROMA_SCALE = 12.0
+GRADIENT_WEIGHT = 0.2
+CRITERION = None
 OPTIM = torch.optim.Adam
-LR = 1e-4
-EPOCHS = 300
+LR = 5e-4
+EPOCHS = 1000
 
 print(f'[INFO] Starting experiment {EXPERIMENT_NAME}')
 
@@ -69,14 +72,53 @@ val_dl = get_dataloaders(batch_size=BATCH_SIZE,
                          image_size=IMAGE_SIZE, 
                          train=False)
 
+class ChromaWeightedL1Loss(torch.nn.Module):
+    def __init__(self, neutral: float=128 / 255, active_weight: float=8.0, chroma_scale: float=12.0):
+        super().__init__()
+        self.neutral = neutral
+        self.active_weight = active_weight
+        self.chroma_scale = chroma_scale
+
+    def forward(self, pred: torch.Tensor, target: torch.Tensor) -> torch.Tensor:
+        chroma = torch.sqrt(
+            (target[:, 0:1] - self.neutral) ** 2 +
+            (target[:, 1:2] - self.neutral) ** 2
+        )
+        weights = 1.0 + self.active_weight * torch.clamp(chroma * self.chroma_scale, 0.0, 1.0)
+        return (torch.abs(pred - target) * weights).mean()
+
+
+class ABGradientLoss(torch.nn.Module):
+    def forward(self, pred: torch.Tensor, target: torch.Tensor) -> torch.Tensor:
+        pred_dx = pred[:, :, :, 1:] - pred[:, :, :, :-1]
+        pred_dy = pred[:, :, 1:, :] - pred[:, :, :-1, :]
+        target_dx = target[:, :, :, 1:] - target[:, :, :, :-1]
+        target_dy = target[:, :, 1:, :] - target[:, :, :-1, :]
+
+        return torch.abs(pred_dx - target_dx).mean() + torch.abs(pred_dy - target_dy).mean()
+
+
+class ColorizationDetailLoss(torch.nn.Module):
+    def __init__(self, active_weight: float=8.0, chroma_scale: float=12.0, gradient_weight: float=0.2):
+        super().__init__()
+        self.gradient_weight = gradient_weight
+        self.chroma_l1 = ChromaWeightedL1Loss(active_weight=active_weight, chroma_scale=chroma_scale)
+        self.gradient = ABGradientLoss()
+
+    def forward(self, pred: torch.Tensor, target: torch.Tensor) -> torch.Tensor:
+        pred_2d = pred.squeeze(2) if pred.ndim == 5 else pred
+        target_2d = target.squeeze(2) if target.ndim == 5 else target
+        return self.chroma_l1(pred, target) + self.gradient_weight * self.gradient(pred_2d, target_2d)
+
 def train_and_val(loss_values_train: List[float], 
                   loss_values_val: List[float], 
                   model: DynamicUnet, 
                   scaler: torch.cuda.amp.GradScaler,
                   train_dl: torch.utils.data.DataLoader, 
                   val_dl: torch.utils.data.DataLoader,
-                  optim: torch.optim.Adam, 
-                  criterion: torch.nn.L1Loss,  
+                  optim: torch.optim.Adam,
+                  scheduler,
+                  criterion: torch.nn.Module,  
                   epochs) -> Dict:
 
     torch.cuda.empty_cache()
@@ -142,6 +184,11 @@ def train_and_val(loss_values_train: List[float],
         
         loss_val = loss_batch / total_samples
         loss_values_val.append(loss_val)
+
+        scheduler.step()
+
+        current_lr = optim.param_groups[0]["lr"]
+        print(f'[INFO] Current LR: {current_lr:.2e}')
 
         # Early stopping
         if loss_val < min_val_loss:
@@ -214,7 +261,21 @@ print(f'[INFO] Total number of parameters: {pytorch_total_params}')
 scaler = torch.cuda.amp.GradScaler()
 
 optim = OPTIM(model.parameters(), lr=LR)
-criterion = CRITERION
+
+scheduler = torch.optim.lr_scheduler.LambdaLR(
+    optim,
+    lr_lambda=lambda epoch: (
+        1.0 if epoch < 70 else
+        0.8 if epoch < 100 else
+        0.5
+    )
+)
+
+criterion = ColorizationDetailLoss(
+    active_weight=ACTIVE_WEIGHT,
+    chroma_scale=CHROMA_SCALE,
+    gradient_weight=GRADIENT_WEIGHT,
+)
 
 loss_values_train = []
 loss_values_val = []
@@ -230,7 +291,10 @@ hyperparams = {
     'BACKBONE': BACKBONE,
     'SELF_ATTENTION': SELF_ATTENTION,
     'ACTIVATION_FUNCTION': ACTIVATION_FUNCTION,
-    'CRITERION': CRITERION.__class__.__name__,
+    'CRITERION': criterion.__class__.__name__,
+    'ACTIVE_WEIGHT': ACTIVE_WEIGHT,
+    'CHROMA_SCALE': CHROMA_SCALE,
+    'GRADIENT_WEIGHT': GRADIENT_WEIGHT,
     'OPTIM': optim.__class__.__name__,
     'LR': LR,
     'EPOCHS': EPOCHS
@@ -247,7 +311,8 @@ best_model, best_epoch = train_and_val(loss_values_train,
                                         scaler,
                                         train_dl, 
                                         val_dl,
-                                        optim, 
+                                        optim,
+                                        scheduler,
                                         criterion, 
                                         EPOCHS)
 

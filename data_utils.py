@@ -16,9 +16,11 @@ class LossValues:
     train_gen_l1: float = np.inf
     val: float = np.inf
     best_epoch: int = 0
+    best_train_epoch: int = 0
 
     train_disc_history: list = field(default_factory=list)
     train_gen_history: list = field(default_factory=list)
+    train_gen_l1_history: list = field(default_factory=list)
     val_history: list = field(default_factory=list)
 
 class SEMColorizationDataset(Dataset):

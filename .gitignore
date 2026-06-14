@@ -8,3 +8,7 @@ __pycache__
 dataset*/*
 *.ipynb
 *local_*
+runs/*
+experiments/*
+!experiments/gan-unet-resnet18-just-mish-phage-single-color-384-weighted-detail-loss-v10-2026-06-02-16:25:21/
+!experiments/gan-unet-resnet18-just-mish-phage-single-color-384-weighted-detail-loss-v10-2026-06-02-16:25:21/*
